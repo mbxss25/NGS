@@ -1,0 +1,50 @@
+#Whole genome sequencing
+
+#Installation
+
+brew install fastqc
+brew install bwa
+brew install samtools
+brew install htslib
+brew install bcftools
+
+#Sample data
+
+# Install SRA toolkit if not already
+brew install sratoolkit
+
+# Example: Download E. coli data (replace with any SRA accession)
+mkdir -p ~/WGS/data
+prefetch SRR2584863 --output-directory ~/WGS/data
+#split
+fastq-dump --split-files SRR2584863.sra
+
+#Quality Check with FastQC
+fastqc SRR2584863_1.fastq SRR2584863_2.fastq
+
+#get refernece genome
+wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/005/845/GCF_000005845.2_ASM584v2/GCF_000005845.2_ASM584v2_genomic.fna.gz
+gunzip GCF_000005845.2_ASM584v2_genomic.fna.gz
+mv GCF_000005845.2_ASM584v2_genomic.fna ecoli_ref.fa
+
+#Index it for alignment:
+bwa index ecoli_ref.fa
+
+#align reads to genome
+bwa mem ecoli_ref.fa SRR2584863_1.fastq SRR2584863_2.fastq > aligned.sam
+
+#Convert, Sort & Index BAM
+samtools view -Sb aligned.sam > aligned.bam
+samtools sort aligned.bam -o aligned.sorted.bam
+samtools index aligned.sorted.bam
+
+# Variant Calling (VCF file)
+bcftools mpileup -Ou -f ecoli_ref.fa aligned.sorted.bam | bcftools call -mv -Oz -o variants.vcf.gz
+bcftools index variants.vcf.gz
+bcftools view variants.vcf.gz > variants.vcf
+
+
+#Visualize with IGV (Install GUI)
+
+
+
