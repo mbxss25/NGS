@@ -39,7 +39,7 @@ samtools sort aligned.bam -o aligned.sorted.bam
 samtools index aligned.sorted.bam
 
 # Variant Calling (VCF file)
-bcftools mpileup -Ou -f ecoli_ref.fa aligned.sorted.bam | bcftools call -mv -Oz -o variants.vcf.gz
+bcftools mpileup -Ou -f ecoli_ref.fa aligned.sorted.bam | bcftools call -m -Oz -o variants.vcf.gz
 bcftools index variants.vcf.gz
 bcftools view variants.vcf.gz > variants.vcf
 
