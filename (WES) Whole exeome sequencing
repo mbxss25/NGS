@@ -1,0 +1,43 @@
+bash# 1. Quality Control of Raw Reads
+fastqc sample_R1.fastq.gz sample_R2.fastq.gz -o qc_reports/
+
+# 2. Trim Adapters and Low Quality Bases
+trimmomatic PE sample_R1.fastq.gz sample_R2.fastq.gz \
+    sample_R1_trimmed.fastq.gz sample_R1_unpaired.fastq.gz \
+    sample_R2_trimmed.fastq.gz sample_R2_unpaired.fastq.gz \
+    ILLUMINACLIP:adapters.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
+
+# 3. Index Reference Genome
+bwa index reference_genome.fasta
+
+# 4. Align Reads to Reference
+bwa mem -t 8 reference_genome.fasta sample_R1_trimmed.fastq.gz sample_R2_trimmed.fastq.gz > sample.sam
+
+# 5. Convert SAM to BAM and Sort
+samtools view -bS sample.sam | samtools sort - sample_sorted
+
+# 6. Mark Duplicates
+picard MarkDuplicates I=sample_sorted.bam O=sample_dedup.bam M=sample_metrics.txt
+
+# 7. Index BAM file
+samtools index sample_dedup.bam
+
+# 8. Target Enrichment Quality Check
+picard CollectHsMetrics I=sample_dedup.bam O=sample_hs_metrics.txt \
+    R=reference_genome.fasta BAIT_INTERVALS=exome_targets.interval_list \
+    TARGET_INTERVALS=exome_targets.interval_list
+
+# 9. Variant Calling (Targeted to Exonic Regions)
+gatk HaplotypeCaller -R reference_genome.fasta -I sample_dedup.bam \
+    -L exome_targets.bed -O sample_exome_variants.vcf
+
+# 10. Filter Variants (More Stringent for Exomes)
+gatk VariantFiltration -R reference_genome.fasta -V sample_exome_variants.vcf \
+    --filter-expression "QD < 2.0 || FS > 60.0 || MQ < 40.0 || ReadPosRankSum < -8.0" \
+    --filter-name "exome_filter" -O sample_exome_filtered.vcf
+
+# 11. Annotate with Clinical Significance
+snpEff -v hg38 sample_exome_filtered.vcf > sample_exome_annotated.vcf
+
+# 12. Extract High Impact Variants
+snpSift filter "ANN[*].IMPACT has 'HIGH'" sample_exome_annotated.vcf > high_impact_variants.vcf
