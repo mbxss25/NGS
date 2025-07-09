@@ -1,0 +1,46 @@
+# RNA sequencing
+
+# 1. sample qc
+fastqc sample_R1.fastq.gz sample_R2.fastq.gz -o qc_reports/
+
+# 2. Trim Adapters
+trimmomatics PE sample_R1.fastq.gz sample_R2.fastq.gz \
+    sample_R1_trimmed.fastq.gz sample_R1_unpaired.fastq.gz \
+    sample_R2_trimmed.fastq.gz sample_R2_unpaired.fastq.gz \
+    ILLUMINACLIP:Trueseq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
+
+
+# 3. Build STAR index 
+STAR --runMode genomeGenerate --genomeDir star_index/ \
+    --genomeFASTAfiles reference_genome.fasta \
+    --sjdbGTFfile annotation.gtf --sjdbOverhang 100
+
+# 4. Aligned reads with STAR
+STAR --runThreadN -8 --genomeDir star_index/ \
+    --readFilesIn sample_R1_trimmed.fastq.gz sample_R2_trimmed.fastq.gz \
+    --readFiesCommanand zcat --outSAMtype BAM SortedByCoordinates \
+    --outFileNamePrefix sample_
+
+# 5. Index BAM files
+samtools index sample_Aligned.sortedByCoord.out.bam
+
+# 6. Count reads per Gene
+feaureCounts -a annotation.gtf -o sample_counts.txt \
+  -T 8 -p sample_Aligned.sortedByCoord.out.bam
+
+#7. Differential expression analysis (DEA) in R.
+
+echo "
+library(DESeq2)
+counts <- read.table('sample_counts.txt', header=True, row.names=1)
+coldata <- data.frame(conditions=c('treated','control'))
+dds <- DESeqDataSetFormMatrix(counts, coldata, design=~condition)
+dds <- DESeq(dds)
+results <- results(dds)
+write.csv(results, 'differential_expression.csv')
+" deseq_analysis.R
+
+Rscript deseq_analysis.R
+
+
+
